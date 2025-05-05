@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>原物料管理</title>
+<title>原物料管理（完整版）</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
 <style>
 body{padding:2rem}
 .table-responsive{max-height:50vh;overflow-y:auto}
@@ -17,22 +18,37 @@ body{padding:2rem}
 </style>
 </head>
 <body>
-<h2>原物料管理</h2>
+<h2>原物料管理（完整版）</h2>
 <form id="matForm" class="row g-3 align-items-end">
  <div class="col-md-3"><label class="form-label">日期</label><input id="matDate" type="date" class="form-control" required></div>
+ <div class="col-md-3"><label class="form-label">料號</label><input id="matCode" type="text" class="form-control"></div>
  <div class="col-md-3"><label class="form-label">品項</label><input id="matItem" type="text" class="form-control" required></div>
+ <div class="col-md-2"><label class="form-label">儲位</label><input id="matLoc" type="text" class="form-control"></div>
  <div class="col-md-2"><label class="form-label">進料量(+)</label><input id="matIn" type="number" step="any" class="form-control" value="0"></div>
  <div class="col-md-2"><label class="form-label">領料量(-)</label><input id="matOut" type="number" step="any" class="form-control" value="0"></div>
  <div class="col-md-2 d-grid"><button class="btn btn-primary" type="submit">新增/更新</button></div>
 </form>
+
+<hr>
+<h5>QR 掃描器（自動填入料號／品項／儲位）</h5>
+<select id="cameraSelect" class="form-select w-auto mb-2"></select>
+<div id="reader" style="width:100%;max-width:400px;margin-bottom:1rem;"></div>
+<div class="mb-3">
+ <button class="btn btn-outline-secondary btn-sm" onclick="startScanner()">啟動掃描器</button>
+ <button class="btn btn-outline-danger btn-sm" onclick="stopScanner()">停止掃描器</button>
+</div>
+<div id="qrError" class="text-danger mb-3"></div>
+
 <div class="table-responsive mt-4">
 <table id="matTable" class="table table-sm table-striped">
- <thead class="table-light"><tr><th>日期</th><th>品項</th><th>進料量</th><th>領料量</th><th>庫存量</th></tr></thead>
+ <thead class="table-light"><tr><th>日期</th><th>料號</th><th>品項</th><th>儲位</th><th>進料量</th><th>領料量</th><th>庫存量</th></tr></thead>
  <tbody></tbody>
 </table>
 </div>
 
 <div class="d-flex gap-2 my-3">
+ <button class="btn btn-outline-primary" onclick="saveJson()">儲存資料</button>
+ <input type="file" accept=".json" class="form-control w-auto" onchange="loadJson(event)">
  <input id="reportDate" type="date" class="form-control w-auto">
  <button id="exportPdf" class="btn btn-danger">匯出 PDF</button>
  <button id="exportXls" class="btn btn-success">匯出 Excel</button>
@@ -41,59 +57,50 @@ body{padding:2rem}
 <div id="reportContainer" style="display:none;"></div>
 
 <script>
-let data=[];
+let data=[], qrScanner=null;
 const tbody=document.querySelector('#matTable tbody');
+
 document.getElementById('matForm').addEventListener('submit',e=>{
  e.preventDefault();
  const d=matDate.value;
+ const code=matCode.value.trim();
  const it=matItem.value.trim();
+ const loc=matLoc.value.trim();
  const qIn=parseFloat(matIn.value)||0;
  const qOut=parseFloat(matOut.value)||0;
- const stock=data.filter(r=>r.item===it&&r.date<=d).reduce((a,c)=>a+c.in-c.out,0)+qIn-qOut;
- data.push({date:d,item:it,in:qIn,out:qOut,stock});
- render();
- e.target.reset();matDate.focus();
+ const stock=data.filter(r=>r.date===d&&r.code===code&&r.item===it&&r.loc===loc)
+   .reduce((a,c)=>a+c.in-c.out,0)+qIn-qOut;
+ let existing=data.find(r=>r.date===d&&r.code===code&&r.item===it&&r.loc===loc);
+ if(existing){ existing.in+=qIn; existing.out+=qOut; existing.stock=stock; }
+ else{ data.push({date:d,code:code,item:it,loc:loc,in:qIn,out:qOut,stock}); }
+ render(); e.target.reset(); matDate.focus();
 });
 
-function render(){
- tbody.innerHTML='';
- data.sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(r=>{
-  tbody.insertAdjacentHTML('beforeend',`<tr><td>${r.date}</td><td>${r.item}</td><td>${r.in}</td><td>${r.out}</td><td>${r.stock}</td></tr>`);
- });
-}
+function render(){ tbody.innerHTML=''; data.sort((a,b)=>new Date(a.date)-new Date(b.date))
+ .forEach(r=>tbody.insertAdjacentHTML('beforeend',
+ `<tr><td>${r.date}</td><td>${r.code||''}</td><td>${r.item}</td><td>${r.loc||''}</td><td>${r.in}</td><td>${r.out}</td><td>${r.stock}</td></tr>`)); }
 
-function buildDaily(date){
- const daily=data.filter(r=>r.date===date);
- if(!daily.length) return null;
- const agg={};
- daily.forEach(r=>{
-  if(!agg[r.item]) agg[r.item]={in:0,out:0,stock:0};
-  agg[r.item].in+=r.in;agg[r.item].out+=r.out;agg[r.item].stock=r.stock;
- });
- let html='<div class="report-title">每日原物料管理表</div><p>日期：'+date+'</p>';
- html+='<table class="report-border" width="100%"><thead><tr><th>品項</th><th>進料量</th><th>領料量</th><th>結餘</th></tr></thead><tbody>';
- Object.entries(agg).forEach(([k,v])=>{
-  html+=`<tr><td>${k}</td><td>${v.in}</td><td>${v.out}</td><td>${v.stock}</td></tr>`;
- });
- html+='</tbody></table>';
- html+='<div class="mt-4"><span>管理人</span><span class="signature-line"></span><span>單位主管</span><span class="signature-line"></span></div>';
- return html;
-}
+async function startScanner(){ stopScanner(); try{
+  const cams=await Html5Qrcode.getCameras(); if(!cams.length) throw '未偵測到鏡頭';
+  const id=document.getElementById('cameraSelect').value||cams[0].id;
+  qrScanner=new Html5Qrcode('reader');
+  await qrScanner.start(id,{fps:10,qrbox:250},(txt)=>{
+    try{const d=JSON.parse(txt); if(d.code)matCode.value=d.code; if(d.item)matItem.value=d.item; if(d.loc)matLoc.value=d.loc;}catch{document.getElementById('qrError').innerText='QR格式錯誤';}
+    stopScanner();
+  },err=>{});
+ }catch(e){document.getElementById('qrError').innerText='鏡頭錯誤:'+e;} }
+function stopScanner(){ if(qrScanner) qrScanner.stop().then(()=>qrScanner.clear()).catch(()=>{}); qrScanner=null; }
+Html5Qrcode.getCameras().then(devices=>document.getElementById('cameraSelect')
+ .innerHTML=devices.map(d=>`<option value="${d.id}">${d.label}</option>`).join(''));
 
-document.getElementById('exportPdf').addEventListener('click',()=>{
- const d=reportDate.value;if(!d){alert('請先選擇日期');return;}
- const html=buildDaily(d);if(!html){alert('無該日資料');return;}
- const cont=document.getElementById('reportContainer');cont.innerHTML=html;cont.style.display='block';
- const opt={margin:.3,filename:'Material_'+d+'.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2},jsPDF:{unit:'in',format:'a4'}};
- html2pdf().from(cont).set(opt).save().then(()=>{cont.style.display='none';});
-});
+function saveJson(){ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='material_backup.json'; a.click(); URL.revokeObjectURL(u); }
+function loadJson(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=evt=>{ try{const j=JSON.parse(evt.target.result); if(Array.isArray(j)){data=j;render();}else alert('格式錯誤');}catch{alert('讀取失敗');} }; r.readAsText(f); }
 
-document.getElementById('exportXls').addEventListener('click',()=>{
- const wb=XLSX.utils.book_new();
- const ws=XLSX.utils.json_to_sheet(data);
- XLSX.utils.book_append_sheet(wb,ws,'Materials');
- XLSX.writeFile(wb,'material_data.xlsx');
-});
+function buildDaily(date){ const daily=data.filter(r=>r.date===date); if(!daily.length)return null; const agg={}; daily.forEach(r=>{ const k=[r.date,r.code,r.item,r.loc].join(); if(!agg[k])agg[k]={date:r.date,code:r.code,item:r.item,loc:r.loc,in:0,out:0,stock:0}; agg[k].in+=r.in; agg[k].out+=r.out; agg[k].stock=r.stock; }); let h='<div class="report-title">每日原物料管理表</div><p>日期：'+date+'</p>'; h+='<table class="report-border" width="100%"><thead><tr><th>料號</th><th>品項</th><th>儲位</th><th>進料量</th><th>領料量</th><th>結餘</th></tr></thead><tbody>'; Object.values(agg).forEach(r=>{h+=`<tr><td>${r.code||''}</td><td>${r.item}</td><td>${r.loc||''}</td><td>${r.in}</td><td>${r.out}</td><td>${r.stock}</td></tr>`;}); h+='</tbody></table><div class="mt-4"><span>管理人</span><span class="signature-line"></span><span>單位主管</span><span class="signature-line"></span></div>'; return h; }
+
+document.getElementById('exportPdf').addEventListener('click',()=>{ const d=reportDate.value; if(!d){alert('請選日期');return;} const html=buildDaily(d); if(!html){alert('無資料');return;} const cont=document.getElementById('reportContainer'); cont.innerHTML=html; cont.style.display='block'; html2pdf().from(cont).set({margin:.3,filename:'Report_'+d+'.pdf',image:{type:'jpeg',quality:.98},html2canvas:{scale:2},jsPDF:{unit:'in',format:'a4'}}).save().then(()=>cont.style.display='none'); });
+
+document.getElementById('exportXls').addEventListener('click',()=>{ const wb=XLSX.utils.book_new(); const ws=XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code||'',品項:r.item,儲位:r.loc||'',進料量:r.in,領料量:r.out,庫存量:r.stock}))); XLSX.utils.book_append_sheet(wb,ws,'Data'); XLSX.writeFile(wb,'data.xlsx'); });
 </script>
 </body>
 </html>
