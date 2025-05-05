@@ -155,10 +155,5 @@ document.getElementById('exportPdf').addEventListener('click', ()=> {
 
 document.getElementById('exportXls').addEventListener('click', ()=>{
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock}))); 
-  XLSX.utils.book_append_sheet(wb, ws, 'Data');
-  XLSX.writeFile(wb, 'data.xlsx');
-});
-</script>
-</body>
-</html>
+  const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock})));
+ ━━━ HTML TRUNCATED ━━━
