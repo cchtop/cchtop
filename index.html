@@ -6,55 +6,30 @@
   <title>原物料管理（穩定版）</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
   <style>
     body { padding: 2rem; }
     .table-responsive { max-height: 50vh; overflow-y: auto; }
-    .report-border td, .report-border th { border: 1px solid #000; padding: 4px; text-align: center; }
-    .report-title { font-weight: bold; font-size: 1.25rem; text-align: center; margin-bottom: 1rem; }
+    .report-title { text-align: center; font-weight: bold; font-size: 1.5rem; margin-bottom: 1rem; }
     .signature-line { height: 40px; border-bottom: 1px solid #000; width: 160px; display: inline-block; margin: 0 1rem; }
-    @media print { @page { size: A4; margin: 15mm } }
   </style>
 </head>
 <body>
   <h2>原物料管理（穩定版）</h2>
   <form id="matForm" class="row g-3 align-items-end">
-    <div class="col-md-3">
-      <label class="form-label">日期</label>
-      <input id="matDate" type="date" class="form-control" required>
-    </div>
-    <div class="col-md-3">
-      <label class="form-label">料號</label>
-      <input id="matCode" type="text" class="form-control">
-    </div>
-    <div class="col-md-3">
-      <label class="form-label">品項</label>
-      <input id="matItem" type="text" class="form-control" required>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">儲位</label>
-      <input id="matLoc" type="text" class="form-control">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">進料量(+)</label>
-      <input id="matIn" type="number" step="any" class="form-control" value="0">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">領料量(-)</label>
-      <input id="matOut" type="number" step="any" class="form-control" value="0">
-    </div>
-    <div class="col-md-2 d-grid">
-      <button class="btn btn-primary" type="submit">新增/更新</button>
-    </div>
+    <div class="col-md-3"><label class="form-label">日期</label><input id="matDate" type="date" class="form-control" required></div>
+    <div class="col-md-3"><label class="form-label">料號</label><input id="matCode" type="text" class="form-control"></div>
+    <div class="col-md-3"><label class="form-label">品項</label><input id="matItem" type="text" class="form-control" required></div>
+    <div class="col-md-2"><label class="form-label">儲位</label><input id="matLoc" type="text" class="form-control"></div>
+    <div class="col-md-2"><label class="form-label">進料量(+)</label><input id="matIn" type="number" step="any" class="form-control" value="0"></div>
+    <div class="col-md-2"><label class="form-label">領料量(-)</label><input id="matOut" type="number" step="any" class="form-control" value="0"></div>
+    <div class="col-md-2 d-grid"><button class="btn btn-primary" type="submit">新增/更新</button></div>
   </form>
 
   <div class="table-responsive mt-4">
     <table id="matTable" class="table table-sm table-striped">
-      <thead class="table-light">
-        <tr>
-          <th>日期</th><th>料號</th><th>品項</th><th>儲位</th><th>進料量</th><th>領料量</th><th>庫存量</th>
-        </tr>
-      </thead>
+      <thead><tr><th>日期</th><th>料號</th><th>品項</th><th>儲位</th><th>進料量</th><th>領料量</th><th>庫存量</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -65,9 +40,8 @@
     <button id="exportXls" class="btn btn-success">匯出 Excel</button>
   </div>
 
-  <div id="reportContainer" style="display:none;"></div>
-
   <script>
+    const { jsPDF } = window.jspdf;
     let data = [];
     const tbody = document.querySelector('#matTable tbody');
 
@@ -79,80 +53,46 @@
       const loc = matLoc.value.trim();
       const qIn = parseFloat(matIn.value) || 0;
       const qOut = parseFloat(matOut.value) || 0;
-      const keyMatch = r => r.date===d && r.code===code && r.item===item && r.loc===loc;
-      let existing = data.find(keyMatch);
-      const stock = data.filter(keyMatch).reduce((a,c)=>a + c.in - c.out, 0) + qIn - qOut;
-      if (existing) {
-        existing.in += qIn;
-        existing.out += qOut;
-        existing.stock = stock;
-      } else {
-        data.push({date:d, code, item, loc, in:qIn, out:qOut, stock});
-      }
-      render();
-      e.target.reset();
-      matDate.focus();
+      const key = r => r.date===d && r.code===code && r.item===item && r.loc===loc;
+      let exist = data.find(key);
+      const stock = data.filter(key).reduce((a,c)=>a+c.in-c.out,0) + qIn - qOut;
+      if (exist) { exist.in += qIn; exist.out += qOut; exist.stock = stock; }
+      else { data.push({date:d,code,item,loc,in:qIn,out:qOut,stock}); }
+      render(); e.target.reset(); matDate.focus();
     });
 
     function render() {
       tbody.innerHTML = '';
       data.sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(r => {
-        tbody.insertAdjacentHTML('beforeend',
-          `<tr><td>${r.date}</td><td>${r.code}</td><td>${r.item}</td><td>${r.loc}</td><td>${r.in}</td><td>${r.out}</td><td>${r.stock}</td></tr>`
-        );
+        const row = `<tr><td>${r.date}</td><td>${r.code}</td><td>${r.item}</td><td>${r.loc}</td><td>${r.in}</td><td>${r.out}</td><td>${r.stock}</td></tr>`;
+        tbody.insertAdjacentHTML('beforeend', row);
       });
-    }
-
-    function buildDaily(date) {
-      const daily = data.filter(r=>r.date===date);
-      if (!daily.length) return null;
-      const agg = {};
-      daily.forEach(r => {
-        const key = [r.code, r.item, r.loc].join();
-        if (!agg[key]) agg[key] = {code:r.code, item:r.item, loc:r.loc, in:0, out:0, stock:0};
-        agg[key].in += r.in;
-        agg[key].out += r.out;
-        agg[key].stock = r.stock;
-      });
-      let html = '<div class="report-title">每日原物料管理表</div><p>日期：'+date+'</p>';
-      html += '<table class="report-border" width="100%"><thead><tr>' +
-              '<th>料號</th><th>品項</th><th>儲位</th><th>進料量</th><th>領料量</th><th>結餘</th>' +
-              '</tr></thead><tbody>';
-      Object.values(agg).forEach(r=>{
-        html += `<tr><td>${r.code}</td><td>${r.item}</td><td>${r.loc}</td><td>${r.in}</td><td>${r.out}</td><td>${r.stock}</td></tr>`;
-      });
-      html += '</tbody></table>' +
-              '<div class="mt-4"><span>管理人</span><span class="signature-line"></span>' +
-              '<span>單位主管</span><span class="signature-line"></span></div>';
-      return html;
     }
 
     document.getElementById('exportPdf').addEventListener('click', ()=>{
-      const d = reportDate.value;
-      if (!d) { alert('請先選擇日期'); return; }
-      const html = buildDaily(d);
-      if (!html) { alert('無該日資料'); return; }
-      const cont = document.getElementById('reportContainer');
-      cont.innerHTML = html;
-      cont.style.display = 'block';
-      html2pdf().from(cont)
-        .set({
-          margin: 0.3,
-          filename: 'Material_' + d + '.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
-          jsPDF: { unit: 'in', format: 'a4' }
-        })
-        .save()
-        .then(() => { cont.style.display = 'none'; });
+      const date = reportDate.value;
+      if(!date) return alert('請先選擇日期');
+      const daily = data.filter(r=>r.date===date);
+      if(!daily.length) return alert('無該日資料');
+      const doc = new jsPDF({ unit:'pt', format:'a4' });
+      doc.setFontSize(16); doc.text('每日原物料管理表', 300, 40, { align:'center' });
+      doc.setFontSize(12); doc.text(`日期：${date}`, 40, 70);
+      const columns = ['料號','品項','儲位','進料量','領料量','結餘'];
+      const rows = daily.map(r=>[r.code,r.item,r.loc,r.in,r.out,r.stock]);
+      doc.autoTable({ startY: 90, head:[columns], body:rows, styles:{cellPadding:4, fontSize:10} });
+      const finalY = doc.lastAutoTable.finalY + 40;
+      doc.text('管理人：______________   單位主管：______________', 40, finalY);
+      doc.save(`Material_${date}.pdf`);
     });
 
     document.getElementById('exportXls').addEventListener('click', ()=>{
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock}))); 
-      XLSX.utils.book_append_sheet(wb, ws, 'Materials');
-      XLSX.writeFile(wb, 'material_data.xlsx');
+      const wsData = data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock}));
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb,ws,'原物料');
+      XLSX.writeFile(wb,'material_data.xlsx');
     });
   </script>
 </body>
 </html>
+
