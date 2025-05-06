@@ -60,8 +60,6 @@
   </div>
 
   <div class="d-flex gap-2 my-3">
-    <button class="btn btn-outline-primary" onclick="saveJson()">儲存資料</button>
-    <input type="file" accept=".json" class="form-control w-auto" onchange="loadJson(event)">
     <input id="reportDate" type="date" class="form-control w-auto">
     <button id="exportPdf" class="btn btn-danger">匯出 PDF</button>
     <button id="exportXls" class="btn btn-success">匯出 Excel</button>
@@ -81,10 +79,9 @@
       const loc = matLoc.value.trim();
       const qIn = parseFloat(matIn.value) || 0;
       const qOut = parseFloat(matOut.value) || 0;
-      // 合併同日同料號/品項/儲位
       const keyMatch = r => r.date===d && r.code===code && r.item===item && r.loc===loc;
-      const existing = data.find(keyMatch);
-      const stock = data.filter(keyMatch).reduce((a,c)=>a + c.in - c.out,0) + qIn - qOut;
+      let existing = data.find(keyMatch);
+      const stock = data.filter(keyMatch).reduce((a,c)=>a + c.in - c.out, 0) + qIn - qOut;
       if (existing) {
         existing.in += qIn;
         existing.out += qOut;
@@ -106,37 +103,13 @@
       });
     }
 
-    // JSON 備份
-    function saveJson() {
-      const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'material_backup.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }
-    function loadJson(e) {
-      const file = e.target.files[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = evt => {
-        try {
-          const arr = JSON.parse(evt.target.result);
-          if(Array.isArray(arr)) { data = arr; render(); }
-          else alert('格式錯誤');
-        } catch { alert('讀取失敗'); }
-      };
-      reader.readAsText(file);
-    }
-
-    // 日報表建構
     function buildDaily(date) {
       const daily = data.filter(r=>r.date===date);
-      if(!daily.length) return null;
+      if (!daily.length) return null;
       const agg = {};
       daily.forEach(r => {
-        const key = [r.code,r.item,r.loc].join();
-        if(!agg[key]) agg[key] = {code:r.code,item:r.item,loc:r.loc,in:0,out:0,stock:0};
+        const key = [r.code, r.item, r.loc].join();
+        if (!agg[key]) agg[key] = {code:r.code, item:r.item, loc:r.loc, in:0, out:0, stock:0};
         agg[key].in += r.in;
         agg[key].out += r.out;
         agg[key].stock = r.stock;
@@ -156,19 +129,19 @@
 
     document.getElementById('exportPdf').addEventListener('click', ()=>{
       const d = reportDate.value;
-      if(!d) { alert('請先選擇日期'); return; }
+      if (!d) { alert('請先選擇日期'); return; }
       const html = buildDaily(d);
-      if(!html) { alert('無該日資料'); return; }
+      if (!html) { alert('無該日資料'); return; }
       const cont = document.getElementById('reportContainer');
       cont.innerHTML = html;
       cont.style.display = 'block';
       html2pdf().from(cont).set({margin:0.3, filename:'Material_'+d+'.pdf', html2canvas:{scale:2}, jsPDF:{unit:'in', format:'a4'}}).save()
-          .then(()=> cont.style.display='none');
+        .then(()=> cont.style.display='none');
     });
 
     document.getElementById('exportXls').addEventListener('click', ()=>{
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock}))); 
+      const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock})));
       XLSX.utils.book_append_sheet(wb, ws, 'Materials');
       XLSX.writeFile(wb, 'material_data.xlsx');
     });
