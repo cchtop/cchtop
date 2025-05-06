@@ -135,13 +135,21 @@
       const cont = document.getElementById('reportContainer');
       cont.innerHTML = html;
       cont.style.display = 'block';
-      html2pdf().from(cont).set({margin:0.3, filename:'Material_'+d+'.pdf', html2canvas:{scale:2}, jsPDF:{unit:'in', format:'a4'}}).save()
-        .then(()=> cont.style.display='none');
+      html2pdf().from(cont)
+        .set({
+          margin: 0.3,
+          filename: 'Material_' + d + '.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'in', format: 'a4' }
+        })
+        .save()
+        .then(() => { cont.style.display = 'none'; });
     });
 
     document.getElementById('exportXls').addEventListener('click', ()=>{
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock})));
+      const ws = XLSX.utils.json_to_sheet(data.map(r=>({日期:r.date,料號:r.code,品項:r.item,儲位:r.loc,進料量:r.in,領料量:r.out,庫存量:r.stock}))); 
       XLSX.utils.book_append_sheet(wb, ws, 'Materials');
       XLSX.writeFile(wb, 'material_data.xlsx');
     });
