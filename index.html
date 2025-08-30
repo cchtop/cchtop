@@ -8,7 +8,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js">
 function saveJson(){
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
+  const GOOGLE_API_URL = 'https://script.google.com/macros/s/AKfycbyN5AuPirl7l0loJ3EJxn3deM2nBvv2uw6eYLeGYwXkCpyy6M8E9-x4K6VVyVB5NZdy/exec';
   const a = document.createElement('a');
   a.href = url; a.download = 'material_backup.json';
   a.click(); URL.revokeObjectURL(url);
