@@ -8,7 +8,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js">
 function saveJson(){
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxpcMo7XEA8KBpYmfiT0jqJ3xlXdnxu4x20GLrzohJ6wYJ4JeA2jXZIwOLTStkOE44K/exec';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwgJgAz3SNshlppj2svPTZ6HZB8RZwOwo9V4zwuYDd-k-MKGmwY3BBRERhS131mG3ovqQ/exec';
   const a = document.createElement('a');
   a.href = url; a.download = 'material_backup.json';
   a.click(); URL.revokeObjectURL(url);
